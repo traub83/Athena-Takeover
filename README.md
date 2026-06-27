@@ -101,6 +101,7 @@
     position:absolute; inset:0;
     display:flex; flex-direction:column; align-items:center; justify-content:center;
     pointer-events:none; z-index:20; opacity:0; transition:opacity 0.5s;
+    background:none;
   }
   #countdown-overlay.visible { opacity:1; }
   #countdown-text {
@@ -116,13 +117,17 @@
     text-shadow:0 0 14px rgba(255,150,50,0.8);
   }
 
-  /* Approach story lines */
+  /* Approach story lines — layered above 3D, no background block */
   #approach-story {
-    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
-    text-align:center; color:#c8b0f0; font-size:clamp(13px,1.8vw,20px);
-    letter-spacing:0.15em; line-height:2.2; pointer-events:none;
-    text-shadow:0 0 30px rgba(184,160,232,0.8);
-    opacity:0; transition:opacity 1s;
+    position:fixed; top:35%; left:50%; transform:translate(-50%,-50%);
+    text-align:center; color:#f0d8ff; font-size:clamp(24px,4.5vw,58px);
+    font-family:'Cinzel',serif; font-weight:600;
+    letter-spacing:0.22em; line-height:1.7; pointer-events:none;
+    text-shadow:0 0 20px rgba(255,255,255,0.9),
+                0 0 50px rgba(220,140,255,1),
+                0 0 100px rgba(160,60,255,0.7);
+    z-index:30; opacity:0; transition:opacity 1.2s;
+    background:none;
   }
   #approach-story.visible { opacity:1; }
 
@@ -136,7 +141,7 @@
   #takeover-screen {
     position:absolute; inset:0; background:rgba(0,0,0,0.95);
     opacity:0; display:flex; flex-direction:column; align-items:center;
-    justify-content:center; pointer-events:none; transition:opacity 2.5s;
+    justify-content:center; pointer-events:none; transition:opacity 2.5s, background 2s ease;
   }
   #takeover-screen.visible { opacity:1; }
   #takeover-screen h2 {
@@ -216,6 +221,30 @@
   <button class="skip-btn" onclick="skipStory()">Skip →</button>
 </div>
 
+<!-- TAP TO BEGIN — guarantees audio unlock -->
+<div id="tap-screen" style="
+  position:fixed; inset:0; background:#000;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  z-index:999; cursor:pointer;
+" onclick="tapToBegin()">
+  <div style="
+    font-family:'Cinzel Decorative',serif; font-size:clamp(28px,5vw,60px);
+    color:#fff; letter-spacing:0.3em; text-transform:uppercase; text-align:center;
+    text-shadow:0 0 40px rgba(255,255,255,0.8), 0 0 80px rgba(200,150,255,0.5);
+    animation:tapPulse 1.8s ease-in-out infinite;
+  ">The Era of Athena</div>
+  <div style="
+    font-family:'Cinzel',serif; font-size:clamp(12px,2vw,18px);
+    color:#888; letter-spacing:0.4em; margin-top:30px; text-transform:uppercase;
+    animation:tapPulse 1.8s ease-in-out infinite 0.4s;
+  ">Tap anywhere to begin</div>
+  <style>
+    @keyframes tapPulse {
+      0%,100%{opacity:0.5;} 50%{opacity:1;}
+    }
+  </style>
+</div>
+
 <!-- MAIN UI -->
 <div id="ui">
   <div id="title">
@@ -253,16 +282,17 @@
     </div>
   </div>
   <div id="uber-flash" style="
-    position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+    position:fixed; bottom:80px; left:0; right:0; display:flex; align-items:center; justify-content:center;
     pointer-events:none; z-index:200; opacity:0; transition:opacity 1s ease;
   ">
     <div style="
       font-family:'Cinzel Decorative',serif; font-size:clamp(20px,3.5vw,42px);
       color:#00ffcc; text-align:center; letter-spacing:0.2em; font-weight:400;
       text-shadow:0 0 40px rgba(0,255,200,0.9), 0 0 80px rgba(0,255,200,0.4);
-      background:rgba(0,0,0,0.75); padding:30px 50px; border:1px solid rgba(0,255,200,0.3);
+      background:rgba(0,0,0,0.6); padding:20px 50px; border:1px solid rgba(0,255,200,0.3);
+      border-radius:4px;
     ">
-      Stay safe<br>Use an Uber
+      Stay safe — Use an Uber
     </div>
   </div>
   <div id="labels-container"></div>
@@ -1165,6 +1195,7 @@ function triggerAthena(){
   if(PHASE_CUR!==PHASE.ORBIT) return;
   PHASE_CUR='countdown';
   setPhaseLabel('');
+  startHeartbeat(); // begins immediately, accelerates through approach
 
   // Flash the warning message immediately on button press
   countdownOverlay.classList.add('visible');
@@ -1319,6 +1350,7 @@ function beginSimulation(){
   // Sun ignites
   setTimeout(()=>{
     sun.visible=true;
+    // Symphony 7 continuous
     let sunOp=0;
     const sv=setInterval(()=>{
       sunOp=Math.min(1,sunOp+0.025);
@@ -1389,11 +1421,16 @@ function resetScene(){
   shockMat.opacity=0; shock2Mat.opacity=0;
   whiteFlashDiv.style.opacity='0';
   document.getElementById('uber-flash').style.opacity='0';
+  stopAllNodes(0.3);
+  sym7Running = false;
+  stopHeartbeat();
+  setTimeout(()=>{ if(actx) actx.resume().then(()=>playSym7()); }, 600);
   impactOverlay.style.opacity=0;
   countdownOverlay.classList.remove('visible');
   const tf=document.getElementById('threat-fill');
   tf.style.transition='none'; tf.style.width='0%';
   takeover.classList.remove('visible');
+  takeover.style.background='rgba(0,0,0,0.95)';
   athenaInfo.style.opacity='0';
   athenaInfo.style.display='none';
   approachStory.classList.remove('visible');
@@ -1509,6 +1546,8 @@ function animate(){
     }
     if(phaseT>=1){
       PHASE_CUR=PHASE.IMPACT; phaseT=0;
+      stopHeartbeat();
+      playImpactMusic();
       impactPos.copy(earthWorldPos);
       explodeActive=true; explodeT=0;
 
@@ -1643,11 +1682,81 @@ function animate(){
       PHASE_CUR=PHASE.TAKEOVER; phaseT=0;
       takeover.classList.add('visible');
       setPhaseLabel('STATE 18 ASSIMILATED — ATHENA REIGNS');
+      // Symphony 7 swells back after impact duck
       // Flash "Stay safe, use an Uber" after a short delay
       setTimeout(()=>{
         const uf=document.getElementById('uber-flash');
+
+        // Step 1: fade takeover bg to transparent so 3D + UFO are visible
+        takeover.style.transition='opacity 2.5s, background 1.5s ease';
+        takeover.style.background='rgba(0,0,0,0)';
+
+        // Step 2: show the sign
         uf.style.opacity='1';
-        setTimeout(()=>{ uf.style.opacity='0'; }, 4000);
+
+        // Step 3: UFO zooms in close above the sign — give it 1s to arrive before sign shows
+        ufoTargetR=18;
+        ufoTargetH=20;
+        ufoTargetSpeed=2.0;
+
+        // Step 4: after UFO has hovered for 3s, zip it away
+        setTimeout(()=>{
+          ufoTargetR=400;
+          ufoTargetH=120;
+          ufoTargetSpeed=6.0;
+
+          // Whoosh sound as it zips
+          try{
+            const ctx2=getACtx();
+            const whoosh=ctx2.createOscillator();
+            const wG=ctx2.createGain();
+            whoosh.type='sawtooth';
+            whoosh.frequency.setValueAtTime(900,ctx2.currentTime);
+            whoosh.frequency.exponentialRampToValueAtTime(60,ctx2.currentTime+0.7);
+            wG.gain.setValueAtTime(0.35,ctx2.currentTime);
+            wG.gain.exponentialRampToValueAtTime(0.001,ctx2.currentTime+0.7);
+            whoosh.connect(wG); wG.connect(ctx2.destination);
+            whoosh.start(); whoosh.stop(ctx2.currentTime+0.7);
+          }catch(e){}
+
+          // Step 5: after UFO is gone (~1.5s), fade sign out AND fade background back to dark
+          setTimeout(()=>{
+            uf.style.opacity='0';
+            takeover.style.transition='opacity 2.5s, background 2s ease';
+            takeover.style.background='rgba(0,0,0,0.95)';
+            // Settle UFO back to normal orbit
+            setTimeout(()=>{ ufoTargetSpeed=0.25; ufoTargetR=150; ufoTargetH=28; }, 1000);
+          }, 1500);
+
+        }, 3000); // UFO hovers for 3s
+
+        // Happy ascending sound when UFO arrives
+        try{
+          const ctx2=getACtx();
+          const happyNotes=[523.3,659.3,783.9,1046.5,1318.5,1567.9,2093];
+          const revH=makeReverb(2,1);
+          const masterH=ctx2.createGain();
+          masterH.gain.value=0.5;
+          revH.connect(masterH); masterH.connect(ctx2.destination);
+          happyNotes.forEach((freq,i)=>{
+            const o=ctx2.createOscillator();
+            const g=ctx2.createGain();
+            o.type='sine'; o.frequency.value=freq;
+            const t=ctx2.currentTime+i*0.13;
+            g.gain.setValueAtTime(0,t);
+            g.gain.linearRampToValueAtTime(0.22,t+0.05);
+            g.gain.exponentialRampToValueAtTime(0.001,t+0.7);
+            o.connect(g); g.connect(revH); o.start(t); o.stop(t+0.75);
+            const o2=ctx2.createOscillator();
+            const g2=ctx2.createGain();
+            o2.type='triangle'; o2.frequency.value=freq*2.01;
+            g2.gain.setValueAtTime(0,t);
+            g2.gain.linearRampToValueAtTime(0.07,t+0.03);
+            g2.gain.exponentialRampToValueAtTime(0.001,t+0.4);
+            o2.connect(g2); g2.connect(revH); o2.start(t); o2.stop(t+0.45);
+          });
+        }catch(e){}
+
       }, 6000);
     }
   }
@@ -1683,17 +1792,409 @@ function players_State18_worldPos(){
     planets['State18'].mesh.getWorldPosition(earthWorldPos);
 }
 
+// ═══════════════════════════════════════════════════════
+//  MUSIC ENGINE — Web Audio API synthesized soundtrack
+// ═══════════════════════════════════════════════════════
+let actx = null;
+let musicNodes = {}; // track active nodes so we can stop them
+
+function getACtx(){
+  if(!actx) actx = new (window.AudioContext||window.webkitAudioContext)();
+  if(actx.state==='suspended') actx.resume();
+  return actx;
+}
+
+function stopAllMusic(){
+  Object.values(musicNodes).forEach(n=>{
+    try{ n.stop(0); }catch(e){}
+  });
+  musicNodes={};
+}
+
+// ── helpers ──────────────────────────────────────────
+function makeOsc(freq, type, gainVal, fadeIn=0.5, dest){
+  const ctx=getACtx();
+  const osc=ctx.createOscillator();
+  const g=ctx.createGain();
+  osc.type=type; osc.frequency.value=freq;
+  g.gain.setValueAtTime(0,ctx.currentTime);
+  g.gain.linearRampToValueAtTime(gainVal,ctx.currentTime+fadeIn);
+  osc.connect(g); g.connect(dest||ctx.destination);
+  osc.start();
+  return {osc,gain:g};
+}
+
+function makePad(freq, gainVal, fadeIn=2){
+  const ctx=getACtx();
+  const osc1=ctx.createOscillator();
+  const osc2=ctx.createOscillator();
+  const osc3=ctx.createOscillator();
+  const g=ctx.createGain();
+  const filt=ctx.createBiquadFilter();
+  filt.type='lowpass'; filt.frequency.value=800; filt.Q.value=1;
+  osc1.type='sine';     osc1.frequency.value=freq;
+  osc2.type='triangle'; osc2.frequency.value=freq*1.002; // slight detune
+  osc3.type='sine';     osc3.frequency.value=freq*2.001;
+  g.gain.setValueAtTime(0,ctx.currentTime);
+  g.gain.linearRampToValueAtTime(gainVal,ctx.currentTime+fadeIn);
+  [osc1,osc2,osc3].forEach(o=>{ o.connect(filt); o.start(); });
+  filt.connect(g); g.connect(ctx.destination);
+  return {oscs:[osc1,osc2,osc3],gain:g,filt};
+}
+
+function stopNode(key){
+  const n=musicNodes[key];
+  if(!n) return;
+  const ctx=getACtx();
+  const fade=0.8;
+  if(n.gain){
+    n.gain.gain.cancelScheduledValues(ctx.currentTime);
+    n.gain.gain.linearRampToValueAtTime(0,ctx.currentTime+fade);
+  }
+  const stop=()=>{
+    try{ if(n.osc) n.osc.stop(0); }catch(e){}
+    try{ if(n.oscs) n.oscs.forEach(o=>o.stop(0)); }catch(e){}
+  };
+  setTimeout(stop, fade*1000+50);
+  delete musicNodes[key];
+}
+
+function stopAllNodes(fadeTime=1.5){
+  const ctx=getACtx();
+  Object.keys(musicNodes).forEach(k=>{
+    const n=musicNodes[k];
+    if(n && n.gain){
+      n.gain.gain.cancelScheduledValues(ctx.currentTime);
+      n.gain.gain.linearRampToValueAtTime(0,ctx.currentTime+fadeTime);
+    }
+    setTimeout(()=>{
+      try{ if(n.osc) n.osc.stop(0); }catch(e){}
+      try{ if(n.oscs) n.oscs.forEach(o=>o.stop(0)); }catch(e){}
+    }, fadeTime*1000+50);
+  });
+  musicNodes={};
+}
+
+// ── REVERB ────────────────────────────────────────────
+function makeReverb(duration=3, decay=2){
+  const ctx=getACtx();
+  const convolver=ctx.createConvolver();
+  const len=ctx.sampleRate*duration;
+  const buf=ctx.createBuffer(2,len,ctx.sampleRate);
+  for(let c=0;c<2;c++){
+    const d=buf.getChannelData(c);
+    for(let i=0;i<len;i++) d[i]=(Math.random()*2-1)*Math.pow(1-i/len,decay);
+  }
+  convolver.buffer=buf;
+  return convolver;
+}
+
+// ── HEARTBEAT ENGINE ─────────────────────────────────
+// Starts slow at 60bpm, accelerates to ~160bpm, stops at impact
+let heartbeatActive = false;
+let heartbeatBPM = 60;
+let heartbeatTimer = null;
+
+function startHeartbeat(){
+  heartbeatActive = true;
+  heartbeatBPM = 60;
+  scheduleHeartbeat();
+}
+
+function stopHeartbeat(){
+  heartbeatActive = false;
+  if(heartbeatTimer){ clearTimeout(heartbeatTimer); heartbeatTimer=null; }
+}
+
+function scheduleHeartbeat(){
+  if(!heartbeatActive) return;
+  const ctx = getACtx();
+
+  // Lub — deep thud
+  const lub = ctx.createOscillator();
+  const lubG = ctx.createGain();
+  lub.type = 'sine';
+  lub.frequency.setValueAtTime(58, ctx.currentTime);
+  lub.frequency.exponentialRampToValueAtTime(32, ctx.currentTime+0.18);
+  lubG.gain.setValueAtTime(0.55, ctx.currentTime);
+  lubG.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+0.22);
+  lub.connect(lubG); lubG.connect(ctx.destination);
+  lub.start(); lub.stop(ctx.currentTime+0.23);
+
+  // Dub — slightly higher, slightly after
+  const dubDelay = 0.14;
+  const dub = ctx.createOscillator();
+  const dubG = ctx.createGain();
+  dub.type = 'sine';
+  dub.frequency.setValueAtTime(48, ctx.currentTime+dubDelay);
+  dub.frequency.exponentialRampToValueAtTime(28, ctx.currentTime+dubDelay+0.15);
+  dubG.gain.setValueAtTime(0, ctx.currentTime);
+  dubG.gain.setValueAtTime(0.38, ctx.currentTime+dubDelay);
+  dubG.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+dubDelay+0.18);
+  dub.connect(dubG); dubG.connect(ctx.destination);
+  dub.start(ctx.currentTime+dubDelay);
+  dub.stop(ctx.currentTime+dubDelay+0.19);
+
+  // Accelerate gradually — faster as Athena closes in
+  heartbeatBPM = Math.min(heartbeatBPM + 1.8, 168);
+  const interval = (60 / heartbeatBPM) * 1000;
+  heartbeatTimer = setTimeout(scheduleHeartbeat, interval);
+}
+
+// ═══════════════════════════════════════════════════════
+//  BEETHOVEN SYMPHONY NO. 7 — ALLEGRETTO (2nd movement)
+//  One continuous loop from first interaction to the end
+// ═══════════════════════════════════════════════════════
+
+// The famous Allegretto theme: A minor, ♩ = 76bpm
+// Rhythm pattern: long-short-short-long-long (♩ ♪♪ ♩ ♩)
+// [frequency, duration_in_beats]
+const A3=220,  C4=261.6, D4=293.7, E4=329.6,
+      F4=349.2, G4=392.0, A4=440.0, B4=493.9,
+      C5=523.3, D5=587.3, E5=659.3, F5=698.5,
+      G5=784.0, A5=880.0;
+
+const SYM7_BEAT = 0.79; // seconds per beat at ♩=76
+
+// Full Allegretto theme — main melody
+const sym7Melody = [
+  // Theme A — bar 1-4
+  [A4,2],[A4,1],[A4,1],[A4,2],[A4,2],
+  [G4,2],[F4,1],[E4,1],[F4,2],[F4,2],
+  [E4,2],[D4,1],[C4,1],[D4,2],[D4,2],
+  [A3,2],[A3,1],[A3,1],[A3,4],
+  // Theme A repeat variation
+  [A4,2],[A4,1],[A4,1],[A4,2],[A4,2],
+  [G4,2],[F4,1],[E4,1],[F4,2],[F4,2],
+  [E4,2],[D4,1],[C4,1],[D4,2],[D4,2],
+  [A3,4],[A3,4],
+  // Theme B — brighter/rising
+  [C5,2],[C5,1],[C5,1],[C5,2],[C5,2],
+  [B4,2],[A4,1],[G4,1],[A4,2],[A4,2],
+  [G4,2],[F4,1],[E4,1],[F4,2],[F4,2],
+  [E4,4],[E4,4],
+  // Theme C — climax phrase
+  [A4,1],[B4,1],[C5,1],[D5,1],[E5,2],[E5,2],
+  [D5,1],[C5,1],[B4,1],[A4,1],[B4,2],[B4,2],
+  [A4,1],[G4,1],[F4,1],[E4,1],[F4,2],[F4,2],
+  [E4,4],[E4,4],
+  // Return to Theme A
+  [A4,2],[A4,1],[A4,1],[A4,2],[A4,2],
+  [G4,2],[F4,1],[E4,1],[F4,2],[F4,2],
+  [E4,2],[D4,1],[C4,1],[D4,2],[D4,2],
+  [A3,4],[A3,4],
+];
+
+// Bass/cello counter-melody
+const sym7Bass = [
+  [A3,4],[A3,4],
+  [F3=174.6,4],[F3,4],
+  [E3=164.8,4],[E3,4],
+  [A3,4],[A3,4],
+  [A3,4],[A3,4],
+  [F3,4],[F3,4],
+  [E3,4],[E3,4],
+  [A3,4],[A3,4],
+  [C4,4],[C4,4],
+  [A3,4],[A3,4],
+  [F3,4],[F3,4],
+  [E3,4],[E3,4],
+  [A3,2],[E4,2],[A3,2],[E4,2],
+  [G3=196,2],[E4,2],[G3,2],[E4,2],
+  [F3,2],[D4,2],[F3,2],[D4,2],
+  [E3,4],[E3,4],
+  [A3,4],[A3,4],
+  [F3,4],[F3,4],
+  [E3,4],[E3,4],
+  [A3,4],[A3,4],
+];
+
+// Inner voice (viola) — rhythmic pulse
+const sym7Viola = [
+  [E4,2],[C4,2],[E4,2],[C4,2],
+  [F4,2],[C4,2],[F4,2],[C4,2],
+  [E4,2],[C4,2],[E4,2],[C4,2],
+  [A3,4],[A3,4],
+  [E4,2],[C4,2],[E4,2],[C4,2],
+  [F4,2],[C4,2],[F4,2],[C4,2],
+  [E4,2],[C4,2],[E4,2],[C4,2],
+  [A3,4],[A3,4],
+  [G4,2],[E4,2],[G4,2],[E4,2],
+  [A4,2],[E4,2],[A4,2],[E4,2],
+  [F4,2],[D4,2],[F4,2],[D4,2],
+  [E4,4],[E4,4],
+  [C5,2],[A4,2],[C5,2],[A4,2],
+  [B4,2],[G4,2],[B4,2],[G4,2],
+  [A4,2],[F4,2],[A4,2],[F4,2],
+  [E4,4],[E4,4],
+  [E4,2],[C4,2],[E4,2],[C4,2],
+  [F4,2],[C4,2],[F4,2],[C4,2],
+  [E4,2],[C4,2],[E4,2],[C4,2],
+  [A3,4],[A3,4],
+];
+
+let sym7MasterGain = null;
+let sym7Running = false;
+
+function playSym7(){
+  if(sym7Running) return;
+  sym7Running = true;
+  const ctx = getACtx();
+  const rev = makeReverb(5, 1.8);
+  const master = ctx.createGain();
+  master.gain.setValueAtTime(0, ctx.currentTime);
+  master.gain.linearRampToValueAtTime(0.5, ctx.currentTime+4);
+  rev.connect(master);
+  master.connect(ctx.destination);
+  sym7MasterGain = master;
+  musicNodes.sym7Master = {gain: master};
+
+  function scheduleVoice(notes, waveType, gainAmt, startT, vibratoHz=0, vibratoAmt=0){
+    let t = startT;
+    notes.forEach(([freq, beats])=>{
+      const dur = beats * SYM7_BEAT;
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.type = waveType;
+      o.frequency.value = freq;
+      if(vibratoHz > 0){
+        const lfo = ctx.createOscillator();
+        const lfoG = ctx.createGain();
+        lfo.frequency.value = vibratoHz;
+        lfoG.gain.value = vibratoAmt;
+        lfo.connect(lfoG); lfoG.connect(o.frequency);
+        lfo.start(t); lfo.stop(t+dur+0.05);
+      }
+      g.gain.setValueAtTime(0, t);
+      g.gain.linearRampToValueAtTime(gainAmt, t+0.04);
+      g.gain.linearRampToValueAtTime(gainAmt*0.85, t+dur-0.08);
+      g.gain.linearRampToValueAtTime(0, t+dur);
+      o.connect(g); g.connect(rev);
+      o.start(t); o.stop(t+dur+0.05);
+      t += dur;
+    });
+    return t; // return end time
+  }
+
+  function scheduleLoop(startT){
+    const totalBeats = sym7Melody.reduce((s,[,b])=>s+b,0);
+    const totalDur = totalBeats * SYM7_BEAT;
+    scheduleVoice(sym7Melody, 'sine',     0.28, startT, 5.5, 6);   // melody — violin
+    scheduleVoice(sym7Melody, 'triangle', 0.10, startT, 5.0, 4);   // melody 2nd — viola
+    scheduleVoice(sym7Bass,   'triangle', 0.18, startT);            // bass — cello
+    scheduleVoice(sym7Viola,  'sine',     0.09, startT);            // inner pulse
+    // Re-schedule 2s before end so there is no gap
+    setTimeout(()=>{
+      if(sym7Running) scheduleLoop(startT + totalDur);
+    }, (totalDur - 2) * 1000);
+  }
+
+  scheduleLoop(ctx.currentTime + 0.3);
+}
+
+function sym7SetVolume(vol, fadeTime=2){
+  if(!sym7MasterGain) return;
+  const ctx = getACtx();
+  sym7MasterGain.gain.cancelScheduledValues(ctx.currentTime);
+  sym7MasterGain.gain.linearRampToValueAtTime(vol, ctx.currentTime + fadeTime);
+}
+
+// Stub out old per-phase music so existing hook calls are safe
+function playStoryMusic(){}
+function playFormingMusic(){}
+function playOrbitMusic(){}
+function playApproachMusic(){}
+function playTakeoverMusic(){}
+
+// Impact — brief volume duck then swell back
+function playImpactMusic(){
+  const ctx = getACtx();
+  // Duck music during boom
+  sym7SetVolume(0.05, 0.1);
+  setTimeout(()=> sym7SetVolume(0.55, 3), 2500);
+
+  // Boom and noise
+  const sub=ctx.createOscillator(); const subG=ctx.createGain();
+  sub.type='sine';
+  sub.frequency.setValueAtTime(80,ctx.currentTime);
+  sub.frequency.exponentialRampToValueAtTime(20,ctx.currentTime+2);
+  subG.gain.setValueAtTime(1.2,ctx.currentTime);
+  subG.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+3);
+  sub.connect(subG); subG.connect(ctx.destination); sub.start(); sub.stop(ctx.currentTime+3);
+
+  const crunch=ctx.createOscillator(); const crunchG=ctx.createGain();
+  crunch.type='sawtooth'; crunch.frequency.value=120;
+  crunchG.gain.setValueAtTime(0.5,ctx.currentTime);
+  crunchG.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+1.5);
+  crunch.connect(crunchG); crunchG.connect(ctx.destination); crunch.start(); crunch.stop(ctx.currentTime+1.5);
+
+  const bufSize=ctx.sampleRate*2;
+  const noiseBuf=ctx.createBuffer(1,bufSize,ctx.sampleRate);
+  const nd=noiseBuf.getChannelData(0);
+  for(let i=0;i<bufSize;i++) nd[i]=Math.random()*2-1;
+  const noise=ctx.createBufferSource(); noise.buffer=noiseBuf;
+  const noiseG=ctx.createGain(); const noiseFilt=ctx.createBiquadFilter();
+  noiseFilt.type='bandpass'; noiseFilt.frequency.value=400; noiseFilt.Q.value=0.5;
+  noiseG.gain.setValueAtTime(0.7,ctx.currentTime);
+  noiseG.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+2);
+  noise.connect(noiseFilt); noiseFilt.connect(noiseG); noiseG.connect(ctx.destination);
+  noise.start(); noise.stop(ctx.currentTime+2);
+}
+
+// ── Wire music to phase transitions ──────────────────
+let musicStarted = false;
+
+function tapToBegin(){
+  const tapScreen = document.getElementById('tap-screen');
+  if(!tapScreen) return;
+
+  // Unlock AudioContext — must happen inside a user gesture
+  try {
+    if(!actx) actx = new (window.AudioContext||window.webkitAudioContext)();
+    actx.resume().then(()=>{
+      if(!musicStarted){
+        musicStarted = true;
+        playSym7();
+      }
+    });
+  } catch(e){ console.warn('Audio init failed:', e); }
+
+  // Fade out tap screen, show story
+  tapScreen.style.transition = 'opacity 0.8s ease';
+  tapScreen.style.opacity = '0';
+  setTimeout(()=>{
+    tapScreen.style.display = 'none';
+    // Start story + simulation
+    beginSimulationWithMusic();
+    setTimeout(showNextLine, 400);
+  }, 850);
+}
+window.tapToBegin = tapToBegin;
+
+function startMusicOnInteraction(){
+  if(musicStarted || !actx) return;
+  musicStarted = true;
+  actx.resume().then(()=> playSym7());
+}
+
+const _origSkipStory = skipStory;
+window.skipStory = function(){
+  startMusicOnInteraction();
+  _origSkipStory();
+};
+
+const _origBeginSim=beginSimulation;
+function beginSimulationWithMusic(){
+  _origBeginSim();
+}
+
 animate();
 window.addEventListener('resize',()=>{
   camera.aspect=innerWidth/innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth,innerHeight);
 });
-
-// ── START everything AFTER all variables/functions are defined ──
-beginSimulation();
-setTimeout(showNextLine, 800);
+// Startup is triggered by tapToBegin() — no auto-start needed
 </script>
 </body>
 </html>
-
